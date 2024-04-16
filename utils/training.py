@@ -15,6 +15,9 @@ import math
 from copy import deepcopy
 import torch.optim
 
+import wandb
+
+
 def mask_classes(outputs: torch.Tensor, dataset: ContinualDataset, k: int) -> None:
     """
     Given the output tensor, the dataset at hand and the current task,
@@ -28,8 +31,9 @@ def mask_classes(outputs: torch.Tensor, dataset: ContinualDataset, k: int) -> No
     outputs[:, (k + 1) * dataset.N_CLASSES_PER_TASK:
             dataset.N_TASKS * dataset.N_CLASSES_PER_TASK] = -float('inf')
 
+
 @torch.no_grad()
-def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False, example_logger=None, verbose=False) -> Tuple[list, list]:
+def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False, verbose=False) -> Tuple[list, list]:
     """
     Evaluates the accuracy of the model for each past task.
     :param model: the model to be evaluated
@@ -63,10 +67,6 @@ def evaluate(model: ContinualModel, dataset: ContinualDataset, last=False, examp
             _, pred = torch.max(outputs.data, 1)
             matches = pred == labels
             correct += torch.sum(matches).item()
-
-            if example_logger and type(example_logger) == ExampleFullLogger:
-                example_logger.log_batch(labels.cpu().byte().numpy(
-                ).tolist(), outputs.cpu().half().numpy().tolist())
 
             total += labels.shape[0]
 
@@ -126,6 +126,8 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     """
 
     print(args)
+
+    wandb.init(project=args.wandb_project, entity=args.wandb_entity, config=args, mode='disabled' if args.nowand else 'online')
 
     model.net.to(model.device)
     results, results_mask_classes = [], []
@@ -209,9 +211,9 @@ def train(model: ContinualModel, dataset: ContinualDataset,
             model.begin_task(dataset)
         if "joint" not in args.model and t and not args.ignore_other_metrics:
             accs = evaluate(model, dataset, last=True)
-            results[t-1] = results[t-1] + accs[0]
+            results[t - 1] = results[t - 1] + accs[0]
             if dataset.SETTING == 'class-il':
-                results_mask_classes[t-1] = results_mask_classes[t-1] + accs[1]
+                results_mask_classes[t - 1] = results_mask_classes[t - 1] + accs[1]
 
         model.evaluator = lambda: evaluate(model, dataset)
         model.evaluation_dsets = dataset.test_loaders
@@ -222,7 +224,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         for epoch in range(args.n_epochs):
             if scheduler is not None:
                 assert model.opt == scheduler.optimizer, "Optimizer changed uncontrollably, scheduler has no effect!!"
-                
+
             if args.model == 'co2l' and t > 0 and args.co2l_task_epoch is not None and epoch > args.co2l_task_epoch:
                 break
             if args.model.startswith('joint'):
@@ -266,7 +268,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
 
             if (epoch % 10 == 0 or epoch == args.n_epochs - 1) and args.examples_full_log:
                 print("Gathering full log task %d epoch %d" %
-                        (t, epoch), file=sys.stderr)
+                      (t, epoch), file=sys.stderr)
                 evaluate(model, dataset, example_logger=example_full_logger)
 
             if scheduler is not None:
@@ -288,19 +290,25 @@ def train(model: ContinualModel, dataset: ContinualDataset,
         # possible checkpoint saving
         if "joint" not in args.model or t == dataset.N_TASKS - 1:
 
-            accs = evaluate(model, dataset, example_logger=example_logger if args.examples_log else None,
+            accs = evaluate(model, dataset,
                             verbose=not model.args.non_verbose)
             print(accs)
-            if args.examples_log:
-                example_logger.write(task=t)
 
             results.append(accs[0])
             results_mask_classes.append(accs[1])
-
             mean_acc = np.mean(accs, axis=1)
+
+            postfix = "" if epoch is None else f"_epoch_{epoch}"
+            d2 = {f'RESULT_class_mean_accs{postfix}': mean_acc[0], f'RESULT_task_mean_accs{postfix}': mean_acc[1],
+                  **{f'RESULT_class_acc_{i}{postfix}': a for i, a in enumerate(accs[0])},
+                  **{f'RESULT_task_acc_{i}{postfix}': a for i, a in enumerate(accs[1])},
+                  'Task': t}
+
+            wandb.log(d2)
+
             update_accs(mean_acc, dataset.SETTING, args.job_number)
             print_mean_accuracy(mean_acc, t + 1, dataset.SETTING)
-            
+
             model_stash['mean_accs'].append(mean_acc)
             if not args.disable_log:
                 logger.log(mean_acc)
@@ -330,7 +338,7 @@ def train(model: ContinualModel, dataset: ContinualDataset,
 
     if not args.disable_log:
         logger.write(vars(args))
-    
+
     mem = get_memory_mb()
     res = {
         "local_proc_mem_MB": mem["self"],
@@ -342,3 +350,13 @@ def train(model: ContinualModel, dataset: ContinualDataset,
     print("Memory usage:")
     for k, v in res.items():
         print(f"\t{k}: {v} MB")
+
+    if not args.disable_log:
+        logger.write(vars(args))
+        if not args.nowand:
+            d = logger.dump()
+            d['wandb_url'] = wandb.run.get_url()
+            wandb.log(d)
+
+    if not args.nowand:
+        wandb.finish()

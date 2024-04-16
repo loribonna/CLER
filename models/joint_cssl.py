@@ -11,7 +11,7 @@ from utils.args import *
 from models.utils.continual_model import ContinualModel
 import torch
 import numpy as np
-from utils.selfsup import get_self_func, init_model, add_self_args
+from utils.selfsup import get_self_func, init_model, add_self_args, post_update_ssl, begin_task_ssl
 
 
 def get_parser() -> ArgumentParser:
@@ -37,6 +37,9 @@ class JointCssl(ContinualModel):
         self.old_test_labels = []
         self.current_task = 0
         self.selffunc = get_self_func(args)
+
+    def begin_task(self, dataset):
+        begin_task_ssl(self.net, dataset, self.args)
 
     def end_task(self, dataset):
         assert len(dataset.train_loader.dataset.data)
@@ -97,6 +100,7 @@ class JointCssl(ContinualModel):
                 self.opt.zero_grad()
                 loss.backward()
                 self.opt.step()
+                post_update_ssl(self.net, self.args)
 
             if scheduler is not None:
                 scheduler.step()

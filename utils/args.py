@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 from datasets import NAMES as DATASET_NAMES
 from models import get_all_models
 
+
 def add_experiment_args(parser: ArgumentParser) -> None:
     """
     Adds the arguments used by all the models.
@@ -32,6 +33,9 @@ def add_experiment_args(parser: ArgumentParser) -> None:
     parser.add_argument('--opt_steps', type=int, nargs='+', default=None)
 
     parser.add_argument('--timeme', action='store_true')
+    parser.add_argument('--nowand', choices=[0, 1], default=0, type=int)
+    parser.add_argument('--wandb_entity', type=str, help='Wandb entity')
+    parser.add_argument('--wandb_project', type=str, default='mammoth', help='Wandb project name')
 
 
 def add_management_args(parser: ArgumentParser) -> None:
@@ -66,6 +70,7 @@ def add_management_args(parser: ArgumentParser) -> None:
     parser.add_argument('--start_from', type=int, default=None, help="Task to start from")
     parser.add_argument('--stop_after', type=int, default=None, help="Task limit")
 
+
 def add_rehearsal_args(parser: ArgumentParser) -> None:
     """
     Adds the arguments used by all the rehearsal-based methods
@@ -75,4 +80,3 @@ def add_rehearsal_args(parser: ArgumentParser) -> None:
                         help='The size of the memory buffer.')
     parser.add_argument('--minibatch_size', type=int, required=False,
                         help='Minibatch size.')
-                        

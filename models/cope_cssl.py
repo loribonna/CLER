@@ -4,7 +4,7 @@ from utils.buffer import Buffer
 from utils.args import *
 from models.utils.continual_model import ContinualModel
 from datasets import get_dataset
-from utils.selfsup import get_self_func, init_model, add_self_args
+from utils.selfsup import get_self_func, init_model, add_self_args, post_update_ssl, begin_task_ssl
 from models.cope import PPPloss
 
 def get_parser() -> ArgumentParser:
@@ -50,6 +50,9 @@ class CoPECssl(ContinualModel):
         self.tmp_protcnt = torch.empty(0).long().to(self.device)
 
         self.selffunc = get_self_func(args)
+
+    def begin_task(self, dataset):
+        begin_task_ssl(self.net, dataset, self.args)
 
     def end_task(self, dataset):
         self.task += 1
@@ -171,6 +174,7 @@ class CoPECssl(ContinualModel):
             if loss.requires_grad:
                 loss.backward()
                 self.opt.step()
+                post_update_ssl(self.net, self.args)
             
             overall_loss += loss.item()
 

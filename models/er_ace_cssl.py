@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from models.utils.continual_model import ContinualModel
 from utils.buffer import Buffer
 from utils.args import *
-from utils.selfsup import get_self_func, init_model, add_self_args
+from utils.selfsup import get_self_func, init_model, add_self_args, post_update_ssl, begin_task_ssl
 
 
 def get_parser() -> ArgumentParser:
@@ -31,6 +31,9 @@ class ErACECssl(ContinualModel):
         self.seen_so_far = torch.tensor([]).long().to(self.device)
         self.task = 0
         self.selffunc = get_self_func(args)
+    
+    def begin_task(self, dataset):
+        begin_task_ssl(self.net, dataset, self.args)
 
     def end_task(self, dataset):
         self.task += 1
@@ -63,7 +66,7 @@ class ErACECssl(ContinualModel):
         if self.task > 0:
             # sample from buffer
             buf_indexes, buf_inputs, buf_labels = self.buffer.get_data(
-                self.args.minibatch_size, transform=self.transform, return_index=True)
+                self.args.batch_size, transform=self.transform, return_index=True)
             buf_not_aug_inputs = self.buffer.examples[buf_indexes]
             buf_logits = self.net(buf_inputs)
 
@@ -79,6 +82,7 @@ class ErACECssl(ContinualModel):
 
         loss.backward()
         self.opt.step()
+        post_update_ssl(self.net, self.args)
 
         self.buffer.add_data(examples=not_aug_inputs[:B],
                              labels=labels)

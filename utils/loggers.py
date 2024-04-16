@@ -29,18 +29,19 @@ def print_mean_accuracy(mean_acc: np.ndarray, task_number: int,
         mean_acc_class_il, mean_acc_task_il = mean_acc
         print('\nAccuracy for {} task(s): \t [Class-IL]: {} %'
               ' \t [Task-IL]: {} %\n'.format(task_number, round(
-            mean_acc_class_il, 2), round(mean_acc_task_il, 2)), file=sys.stderr)
+                  mean_acc_class_il, 2), round(mean_acc_task_il, 2)), file=sys.stderr)
+
 
 class ExampleFullLogger:
     def __init__(self, setting_str, dataset_str, model_str, batch_size):
 
         print("### WARNING: you are logging all examples: this is very demanding ###")
-        
+
         self.setting = setting_str
         self.dataset = dataset_str
         self.model = model_str
         self.batch_size = batch_size
-        
+
         self.epoch_data = []
         self.gt = None
         self.logits_data = []
@@ -51,12 +52,12 @@ class ExampleFullLogger:
         create_if_not_exists(base_path() + "examples_full/" + self.setting +
                              "/" + self.dataset + "/" + self.model)
         path = base_path() + "examples_full/" + self.setting + "/" + self.dataset\
-               + "/" + self.model + "/examples_full_%d_%s.pkl" % (self.batch_size, str(self.time))
-        
+            + "/" + self.model + "/examples_full_%d_%s.pkl" % (self.batch_size, str(self.time))
+
         import pickle
         with open(path, 'wb') as f:
             pickle.dump([self.epoch_data, self.gt, self.logits_data], f)
-        
+
     def set_epoch(self, epoch):
         self.epoch = epoch
 
@@ -65,6 +66,7 @@ class ExampleFullLogger:
         self.logits_data.append(logits)
         if self.gt is None:
             self.gt = gt
+
 
 class LossLogger:
     def __init__(self, setting_str, dataset_str, model_str):
@@ -85,12 +87,13 @@ class LossLogger:
         create_if_not_exists(base_path() + "losses/" + self.setting +
                              "/" + self.dataset + "/" + self.model)
         path = base_path() + "losses/" + self.setting + "/" + self.dataset\
-               + "/" + self.model + "/loss_task_%s_%s.npy" % (str(task), str(self.time))
+            + "/" + self.model + "/loss_task_%s_%s.npy" % (str(task), str(self.time))
         np.save(path, np.array(self.lossboi))
         self.lossboi = []
 
     def log(self, value) -> None:
         self.lossboi.append(value)
+
 
 class CsvLogger:
     def __init__(self, setting_str: str, dataset_str: str,
@@ -171,7 +174,7 @@ class CsvLogger:
 
         write_headers = False
         path = base_path() + "results/" + self.setting + "/" + self.dataset\
-               + "/" + self.model + "/mean_accs.csv"
+            + "/" + self.model + "/mean_accs.csv"
         if not os.path.exists(path):
             write_headers = True
         with open(path, 'a') as tmp:
@@ -195,7 +198,7 @@ class CsvLogger:
 
             write_headers = False
             path = base_path() + "results/task-il" + "/" + self.dataset + "/"\
-                   + self.model + "/mean_accs.csv"
+                + self.model + "/mean_accs.csv"
             if not os.path.exists(path):
                 write_headers = True
             with open(path, 'a') as tmp:
@@ -203,6 +206,7 @@ class CsvLogger:
                 if write_headers:
                     writer.writeheader()
                 writer.writerow(args)
+
 
 class DictxtLogger:
     def __init__(self, setting_str: str, dataset_str: str,
@@ -262,7 +266,7 @@ class DictxtLogger:
             self.fwt_mask_classes = self.fwt_mask_classes[:-num]
             self.bwt_mask_classes = self.bwt_mask_classes[:-num]
             self.forgetting_mask_classes = self.forgetting_mask_classes[:-num]
-        except:
+        except BaseException:
             pass
         if self.setting == 'class-il':
             self.accs_mask_classes = self.accs_mask_classes[:-num]
@@ -310,7 +314,7 @@ class DictxtLogger:
 
         for i, acc in enumerate(self.accs):
             wrargs['accmean_task' + str(i + 1)] = acc
-        
+
         for i, fa in enumerate(self.fullaccs):
             for j, acc in enumerate(fa):
                 wrargs['accuracy_' + str(j + 1) + '_task' + str(i + 1)] = acc
@@ -323,7 +327,7 @@ class DictxtLogger:
         # if args['conf_external_path'] is not None:
         #     assert os.path.isdir(args['conf_external_path'])
         #     target_folder = os.path.join(*[args['conf_external_path'],"results/"])
-        
+
         create_if_not_exists(target_folder + self.setting)
         create_if_not_exists(target_folder + self.setting +
                              "/" + self.dataset)
@@ -331,7 +335,7 @@ class DictxtLogger:
                              "/" + self.dataset + "/" + self.model)
 
         path = target_folder + self.setting + "/" + self.dataset\
-               + "/" + self.model + "/logs.pyd"
+            + "/" + self.model + "/logs.pyd"
         with open(path, 'a') as f:
             f.write(str(wrargs) + '\n')
 
@@ -342,7 +346,7 @@ class DictxtLogger:
 
             for i, acc in enumerate(self.accs_mask_classes):
                 wrargs['accmean_task' + str(i + 1)] = acc
-            
+
             for i, fa in enumerate(self.fullaccs_mask_classes):
                 for j, acc in enumerate(fa):
                     wrargs['accuracy_' + str(j + 1) + '_task' + str(i + 1)] = acc
@@ -352,6 +356,6 @@ class DictxtLogger:
             wrargs['forgetting'] = self.forgetting_mask_classes
 
             path = target_folder + "task-il" + "/" + self.dataset + "/"\
-                   + self.model + "/logs.pyd"
+                + self.model + "/logs.pyd"
             with open(path, 'a') as f:
                 f.write(str(wrargs) + '\n')

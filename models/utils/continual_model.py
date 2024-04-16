@@ -1,11 +1,17 @@
+import sys
 import torch.nn as nn
 import torch
 import torchvision
 from argparse import Namespace
 
+import wandb
+
 from datasets import get_dataset
 from utils.conf import get_device
 from torchvision import transforms
+
+from utils.magic import persistent_locals
+
 
 class ContinualModel(nn.Module):
     """
@@ -17,16 +23,16 @@ class ContinualModel(nn.Module):
     def reset_classifier(self, inherit=False, bias=True):
         if not inherit or self.net.num_classes < self.net.classifier.out_features:
             self.net.classifier = torch.nn.Linear(
-                    self.net.classifier.in_features, self.net.num_classes,bias=bias).to(self.device)
+                self.net.classifier.in_features, self.net.num_classes, bias=bias).to(self.device)
         else:
             # inherit weights
             old_weights, old_bias = self.net.classifier.weight.data, self.net.classifier.bias.data if bias else None
             self.net.classifier = torch.nn.Linear(
-                    self.net.classifier.in_features, self.net.num_classes, bias=bias).to(self.device)
+                self.net.classifier.in_features, self.net.num_classes, bias=bias).to(self.device)
             self.net.classifier.weight.data[:old_weights.shape[0]] = old_weights
             if bias:
                 self.net.classifier.bias.data[:old_weights.shape[0]] = old_bias
-            
+
         self.reset_opt()
 
     def get_scheduler(self):
@@ -48,7 +54,7 @@ class ContinualModel(nn.Module):
     def __init__(self, backbone: nn.Module, loss: nn.Module,
                  args: Namespace, transform: torchvision.transforms) -> None:
         super(ContinualModel, self).__init__()
-        
+
         ds = get_dataset(args)
         self.cpt = ds.N_CLASSES_PER_TASK
         self.n_tasks = ds.N_TASKS
@@ -91,7 +97,7 @@ class ContinualModel(nn.Module):
     @torch.no_grad()
     def aug_batch(self, not_aug_inputs, device=None):
         """
-        Full train transform 
+        Full train transform
         """
         return self.apply_transform(not_aug_inputs, self.train_transform, device=device)
 
@@ -118,4 +124,23 @@ class ContinualModel(nn.Module):
         :param kwargs: some methods could require additional parameters
         :return: the value of the loss function
         """
-        pass
+        if 'wandb' in sys.modules and not self.args.nowand:
+            pl = persistent_locals(self.observe)
+            ret = pl(inputs, labels, not_aug_inputs)
+            self.autolog_wandb(pl.locals)
+        else:
+            ret = self.observe(inputs, labels, not_aug_inputs)
+        return ret
+
+    def autolog_wandb(self, locals, extra=None):
+        """
+        All variables starting with "_wandb_" or "loss" in the observe function
+        are automatically logged to wandb upon return if wandb is installed.
+        """
+        if not self.args.nowand and not self.args.debug_mode:
+            tmp = {k: (v.item() if isinstance(v, torch.Tensor) and v.dim() == 0 else v)
+                   for k, v in locals.items() if k.startswith('_wandb_') or 'loss' in k.lower()}
+            tmp.update(extra or {})
+            if hasattr(self, 'opt'):
+                tmp['lr'] = self.opt.param_groups[0]['lr']
+            wandb.log(tmp)

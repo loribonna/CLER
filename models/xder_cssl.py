@@ -6,7 +6,7 @@ from models.xder import dsimplex
 from utils.args import *
 from utils.no_bn import bn_track_stats
 from utils.buffer import Buffer
-from utils.selfsup import get_self_func, init_model, add_self_args
+from utils.selfsup import get_self_func, init_model, add_self_args, post_update_ssl, begin_task_ssl
 
 def get_parser() -> ArgumentParser:
     parser = ArgumentParser(description='X-DER + CSSL')
@@ -53,6 +53,9 @@ class XDerCssl(ContinualModel):
             self.pernicehead = self.pernicehead.type(x.dtype)
         x = x @ self.pernicehead
         return x
+    
+    def begin_task(self, dataset):
+        begin_task_ssl(self.net, dataset, self.args)
 
     def end_task(self, dataset):
 
@@ -163,7 +166,7 @@ class XDerCssl(ContinualModel):
         if not self.buffer.is_empty():
             # Distillation Replay Loss (all heads)
             buf_idx1, buf_inputs1, buf_labels1, buf_logits1, buf_tl1 = self.buffer.get_data(
-                self.args.minibatch_size, transform=self.transform, return_index=True)
+                self.args.batch_size, transform=self.transform, return_index=True)
             buf_not_aug_inputs_mse = self.buffer.examples[buf_idx1]
             buf_outputs1 = self(buf_inputs1).float()
 
@@ -173,7 +176,7 @@ class XDerCssl(ContinualModel):
 
             # Label Replay Loss (past heads)
             buf_idx2, buf_inputs2, buf_labels2, buf_logits2, buf_tl2 = self.buffer.get_data(
-                self.args.minibatch_size, transform=self.transform, return_index=True)
+                self.args.batch_size, transform=self.transform, return_index=True)
             buf_not_aug_inputs_ce = self.buffer.examples[buf_idx2]
             buf_outputs2 = self(buf_inputs2).float()
 
@@ -255,5 +258,6 @@ class XDerCssl(ContinualModel):
 
         loss.backward()
         self.opt.step()
+        post_update_ssl(self.net, self.args)
 
         return loss.item(),0,0,0,0
