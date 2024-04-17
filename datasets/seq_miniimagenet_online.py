@@ -28,8 +28,9 @@ class MiniImagenet(Dataset):
             if os.path.isdir(root) and len(os.listdir(root)) > 0:
                 print('Download not needed, files already on disk.')
             else:
-                ln = 'https://drive.google.com/file/d/1Ephas2PgPqzBM_JTcWYMWqYSsRuxfteE/view?usp=share_link'
-                raise 'Download not implemented. Please download the dataset manually from the following link: ' + ln
+                from onedrivedownloader import download
+                ln = 'https://unimore365-my.sharepoint.com/:u:/g/personal/215580_unimore_it/Ecbo1YCVHCFBhQhcuHAufeoBGPJ3jUfOv7BUdC3C88E8Iw?e=FYLgHN'
+                download(ln, filename=os.path.join(root, 'miniimagenet.zip'), unzip=True, unzip_path=root, clean=True)
                 
 
         self.data = np.load(os.path.join(
