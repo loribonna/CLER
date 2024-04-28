@@ -154,12 +154,14 @@ def MoCoV2(model, y1, y2, compute_logits=True):
     @torch.no_grad()
     def _dequeue_and_enqueue(model, keys: torch.Tensor):
         batch_size = keys.shape[1]
-        assert model.queue.shape[-1] % batch_size == 0  # for simplicity
+        # assert model.queue.shape[-1] % batch_size == 0  # for simplicity
 
         # replace the keys at ptr (dequeue and enqueue)
+        maxlen = min(model.queue.shape[-1], model.queue_ptr + batch_size)
+        residual = maxlen - model.queue_ptr
         keys = keys.permute(0, 2, 1)
-        model.queue[:, :, model.queue_ptr : model.queue_ptr + batch_size] = keys
-        model.queue_ptr = (model.queue_ptr + batch_size) % model.queue.shape[-1]  # move pointer
+        model.queue[:, :, model.queue_ptr : maxlen] = keys[:,:,:residual]
+        model.queue_ptr = maxlen % model.queue.shape[-1]  # move pointer
 
     feats1, feats2 = model(y1,returnt="features"), model(y2,returnt="features")
     momentum_feats1, momentum_feats2 = model(y1,returnt="features"), model(y2,returnt="features")
