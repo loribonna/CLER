@@ -26,6 +26,7 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--mixup_upper', type=float, default=0.6, help='(default=%(default)s)')
 
     parser.add_argument('--ptx_alpha', type=float, required=True)
+    parser.add_argument('--sim_lambda', type=float, default=1, help='(default=%(default)s)')
     add_management_args(parser)
     add_experiment_args(parser)
     add_rehearsal_args(parser)
