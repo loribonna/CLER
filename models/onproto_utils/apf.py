@@ -35,8 +35,8 @@ class AdaptivePrototypicalFeedback(nn.Module):
             nonZeroRows = torch.abs(classes_mean).sum(dim=1) > 0
             ZeroRows = torch.abs(classes_mean).sum(dim=1) == 0
             class_num = classes_mean.shape[0]
-            nonZero_class = torch.arange(class_num)[nonZeroRows]
-            Zero_class = torch.arange(class_num)[ZeroRows]
+            nonZero_class = torch.arange(class_num, device=classes_mean.device)[nonZeroRows]
+            Zero_class = torch.arange(class_num, device=classes_mean.device)[ZeroRows]
 
             classes_mean = classes_mean[nonZeroRows]
 
@@ -78,10 +78,10 @@ class AdaptivePrototypicalFeedback(nn.Module):
 
         assert sample_num_per_class_pair.sum() == prob_sample_num
 
-        x_indices = torch.arange(self.buffer.examples.shape[0])
-        y_indices = torch.arange(self.buffer.labels.shape[0])
+        x_indices = torch.arange(self.buffer.examples.shape[0], device=self.buffer.examples.device)
+        y_indices = torch.arange(self.buffer.labels.shape[0], device=self.buffer.examples.device)
         y = self.buffer.labels
-        _, y = torch.max(y, dim=1)
+        # _, y = torch.max(y, dim=1) # WARNING: Should be onehot
 
         class_x_list = []
         class_y_list = []

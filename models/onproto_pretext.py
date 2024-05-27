@@ -1,9 +1,8 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
+from models.utils.pretext_model import PretextModel
 from utils.buffer import Buffer
 from utils.args import *
-from models.utils.continual_model import ContinualModel
 from datasets import get_dataset
 from utils.kornia_utils import to_kornia_transform
 from utils.selfsup import init_model
@@ -25,6 +24,8 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--mixup_p', type=float, default=0.6, help='(default=%(default)s)')
     parser.add_argument('--mixup_lower', type=float, default=0, help='(default=%(default)s)')
     parser.add_argument('--mixup_upper', type=float, default=0.6, help='(default=%(default)s)')
+
+    parser.add_argument('--ptx_alpha', type=float, required=True)
     add_management_args(parser)
     add_experiment_args(parser)
     add_rehearsal_args(parser)
@@ -114,13 +115,14 @@ def Supervised_NT_xent_n(sim_matrix, labels, temperature=0.5, chunk=2, eps=1e-8)
     return loss1 + loss2
 
 
-class OnProto(ContinualModel):
-    NAME = 'onproto'
+class OnProtoPretext(PretextModel):
+    NAME = 'onproto_pretext'
     COMPATIBILITY = ['class-il', 'domain-il', 'task-il', 'general-continual']
 
     def __init__(self, backbone, loss, args, transform):
         args.selfsup = 'onproto'
         init_model(backbone, args)
+        backbone = self.init_ptx_heads(args, backbone)
         super().__init__(backbone, loss, args, transform)
         self.buffer = Buffer(self.args.buffer_size, self.device)
         self.seen_so_far = torch.tensor([]).long().to(self.device)
@@ -210,10 +212,12 @@ class OnProto(ContinualModel):
                 # buffer_x.requires_grad = True
                 buffer_x, buffer_y = buffer_x.cuda(), buffer_y.cuda()
                 buffer_x_pair = torch.cat([buffer_x, self.weak_transform(buffer_x)], dim=0)
+                all_inputs = self.weak_transform(torch.cat((x, buffer_x_pair), dim=0))
 
                 proto_seen_loss, _, _, _ = self.cal_buffer_proto_loss(buffer_x, buffer_y, buffer_x_pair, self.task)
             else:
                 proto_seen_loss = 0
+                all_inputs = inputs
 
             z = projections[:rot_x.shape[0]]
             zt = projections[rot_x.shape[0]:]
@@ -224,7 +228,11 @@ class OnProto(ContinualModel):
             y_pred = self.net(self.weak_transform(x))
             ce = F.cross_entropy(y_pred, labels)
 
-            loss = ce + ins_loss + OPE_loss
+            ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
+            ptx_outputs = self.get_ptx_outputs(ptx_inputs, self.net)
+            loss_ptx = self.get_ce_pret_loss(ptx_outputs, ptx_labels)
+
+            loss = ce + ins_loss + OPE_loss + self.args.ptx_alpha * loss_ptx
 
         self.scaler.scale(loss).backward()
         self.scaler.step(self.opt)
@@ -248,12 +256,16 @@ class OnProto(ContinualModel):
                 rot_mem_y_mix[:, 0] = torch.cat([mem_y_mix[:, 0] + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_mem_y_mix[:, 1] = torch.cat([mem_y_mix[:, 1] + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_mem_y_mix[:, 2] = mem_y_mix[:, 2].repeat(self.args.oop)
+
+                all_inputs = self.weak_transform(torch.cat((inputs, mem_x), dim=0))
             else:
                 mem_x = ori_mem_x
                 mem_y = ori_mem_y
 
                 rot_sim_labels = torch.cat([labels + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_sim_labels_r = torch.cat([mem_y + self.num_classes * i for i in range(self.args.oop)], dim=0)
+
+                all_inputs = self.weak_transform(inputs)
 
             # mem_x = mem_x.requires_grad_()
 
@@ -313,7 +325,11 @@ class OnProto(ContinualModel):
             else:
                 ce = F.cross_entropy(y_pred, mem_y)
 
-            loss = ce + ins_loss + OPE_loss
+            ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
+            ptx_outputs = self.get_ptx_outputs(ptx_inputs, self.net)
+            loss_ptx = self.get_ce_pret_loss(ptx_outputs, ptx_labels)
+
+            loss = ce + ins_loss + OPE_loss + self.args.ptx_alpha * loss_ptx
 
         self.scaler.scale(loss).backward()
         self.scaler.step(self.opt)
