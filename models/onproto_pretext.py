@@ -129,7 +129,6 @@ class OnProtoPretext(PretextModel):
         dset = get_dataset(args)
         self.cpt = dset.N_CLASSES_PER_TASK
         self.num_classes = dset.N_TASKS * dset.N_CLASSES_PER_TASK
-        del dset
         self.task = 0
         self.scaler = GradScaler()
         self.buffer_per_class = 7
@@ -141,14 +140,12 @@ class OnProtoPretext(PretextModel):
                                   
         if "cifar100" in args.dataset:
             self.sim_lambda = 1.0
-            self.total_samples = 5000
         elif "cifar10" in args.dataset:
             self.sim_lambda = 0.5
-            self.total_samples = 10000
         elif args.dataset == "tiny_imagenet":
             self.sim_lambda = 1.0
-            self.total_samples = 10000
-
+        else:
+            self.sim_lambda = self.args.sim_lambda
 
     def end_task(self, dataset):
         self.task += 1

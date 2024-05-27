@@ -25,6 +25,8 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--mixup_p', type=float, default=0.6, help='(default=%(default)s)')
     parser.add_argument('--mixup_lower', type=float, default=0, help='(default=%(default)s)')
     parser.add_argument('--mixup_upper', type=float, default=0.6, help='(default=%(default)s)')
+
+    parser.add_argument('--sim_lambda', type=float, default=1, help='(default=%(default)s)')
     add_management_args(parser)
     add_experiment_args(parser)
     add_rehearsal_args(parser)
@@ -127,7 +129,6 @@ class OnProto(ContinualModel):
         dset = get_dataset(args)
         self.cpt = dset.N_CLASSES_PER_TASK
         self.num_classes = dset.N_TASKS * dset.N_CLASSES_PER_TASK
-        del dset
         self.task = 0
         self.scaler = GradScaler()
         self.buffer_per_class = 7
@@ -139,13 +140,12 @@ class OnProto(ContinualModel):
                                   
         if "cifar100" in args.dataset:
             self.sim_lambda = 1.0
-            self.total_samples = 5000
         elif "cifar10" in args.dataset:
             self.sim_lambda = 0.5
-            self.total_samples = 10000
         elif args.dataset == "tiny_imagenet":
             self.sim_lambda = 1.0
-            self.total_samples = 10000
+        else:
+            self.sim_lambda = self.args.sim_lambda
 
 
     def end_task(self, dataset):
