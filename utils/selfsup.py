@@ -31,6 +31,9 @@ def _get_projector_prenet(net, device=None):
 
 
 def init_model(model, args, device=None):
+    model.projector = _get_projector_prenet(model, device=device)
+    model.predictor = deepcopy(model.projector)
+
     if 'moco' in args.selfsup:
         assert args.moco_q_size % args.batch_size == 0, "moco_q_size must be divisible by batch_size"
         queue = torch.randn(2, model.nf * 8, args.moco_q_size)
@@ -49,10 +52,7 @@ def init_model(model, args, device=None):
         model.moco_temperature = args.moco_temperature
     elif args.selfsup == 'onproto':
         model.projector = nn.Linear(model.nf * 8, 128)
-    else:
-        model.projector = _get_projector_prenet(model, device=device)
-        model.predictor = deepcopy(model.projector)
-
+    
     return model
 
 
