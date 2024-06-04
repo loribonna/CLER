@@ -1,4 +1,4 @@
-from torch.optim import SGD
+from torch.optim import SGD, Adam
 from abc import abstractmethod
 from argparse import Namespace
 from torch import nn as nn
@@ -30,7 +30,12 @@ class ContinualDataset:
 
     @staticmethod
     def get_optimizer(parameters, args):
-        return SGD(parameters, lr=args.lr, weight_decay=args.optim_wd, momentum=args.optim_mom)
+        if args.optimizer == 'sgd':
+            return SGD(parameters, lr=args.lr, weight_decay=args.optim_wd, momentum=args.optim_mom)
+        elif args.optimizer == 'adam':
+            return Adam(parameters, lr=args.lr, betas=(0.9, 0.99), weight_decay=1e-4) # from onproto
+        else:
+            raise ValueError('Optimizer not recognized.')
     
     @staticmethod
     @abstractmethod

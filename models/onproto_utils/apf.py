@@ -1,3 +1,4 @@
+import warnings
 import torch.nn as nn
 import torch
 import torch.nn.functional as F
@@ -8,8 +9,9 @@ import itertools
 
 class AdaptivePrototypicalFeedback(nn.Module):
     def __init__(self, buffer, mixup_base_rate, mixup_p, mixup_lower, mixup_upper, mixup_alpha,
-                 class_per_task):
+                 class_per_task, device):
         super(AdaptivePrototypicalFeedback, self).__init__()
+        self.device = device
         self.buffer = buffer
         self.class_per_task = class_per_task
         self.mixup_base_rate = mixup_base_rate
@@ -18,13 +20,13 @@ class AdaptivePrototypicalFeedback(nn.Module):
         self.mixup_upper = mixup_upper
         self.mixup_alpha = mixup_alpha
         self.mixup = RandomMixUpV2(p=mixup_p, lambda_val=(mixup_lower, mixup_upper),
-                                   data_keys=["input", "class"]).cuda()
+                                   data_keys=["input", "class"]).to(self.device)
 
     def forward(self, mem_x, mem_y, buffer_batch_size, classes_mean, task_id):
         base_rate = self.mixup_base_rate
         base_sample_num = int(buffer_batch_size * base_rate)
 
-        indices = torch.from_numpy(np.random.choice(mem_x.size(0), base_sample_num, replace=False)).cuda()
+        indices = torch.from_numpy(np.random.choice(mem_x.size(0), base_sample_num, replace=False)).to(self.device)
         mem_x_base = mem_x[indices]
         mem_y_base = mem_y[indices]
 
@@ -80,6 +82,8 @@ class AdaptivePrototypicalFeedback(nn.Module):
 
         x_indices = torch.arange(self.buffer.examples.shape[0], device=self.buffer.examples.device)
         y_indices = torch.arange(self.buffer.labels.shape[0], device=self.buffer.examples.device)
+        # x_indices = torch.arange(self.buffer.x.shape[0], device=self.buffer.x.device)
+        # y_indices = torch.arange(self.buffer.y.shape[0], device=self.buffer.x.device)
         y = self.buffer.labels
         # _, y = torch.max(y, dim=1) # WARNING: Should be onehot
 
@@ -132,19 +136,21 @@ class AdaptivePrototypicalFeedback(nn.Module):
             mix_images.append(mix_pair)
             mix_labels.append(mix_y)
 
-        mix_images_by_prob = torch.cat(mix_images).cuda()
-        mix_labels_by_prob = torch.cat(mix_labels).cuda()
+        mix_images_by_prob = torch.cat(mix_images).to(self.device)
+        mix_labels_by_prob = torch.cat(mix_labels).to(self.device)
 
         return mix_images_by_prob, mix_labels_by_prob
 
     def mixup_by_input_pair(self, x1, x2, n):
         if torch.rand([]) <= self.mixup_p:
-            lam = torch.from_numpy(np.random.beta(self.mixup_alpha, self.mixup_alpha, n)).cuda()
+            lam = torch.from_numpy(np.random.beta(self.mixup_alpha, self.mixup_alpha, n)).to(self.device)
             lam_ = lam.unsqueeze(0).unsqueeze(0).unsqueeze(0).view(-1, 1, 1, 1)
         else:
             lam = 0
             lam_ = 0
-        lam = torch.tensor(lam, dtype=x1.dtype)
-        lam_ = torch.tensor(lam_, dtype=x1.dtype)
+        with warnings.catch_warnings():#STFU
+            warnings.simplefilter("ignore")
+            lam = torch.tensor(lam, dtype=x1.dtype)
+            lam_ = torch.tensor(lam_, dtype=x1.dtype)
         image = (1 - lam_) * x1 + lam_ * x2
         return image, lam

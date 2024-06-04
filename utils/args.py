@@ -22,6 +22,9 @@ def add_experiment_args(parser: ArgumentParser) -> None:
                         help='optimizer momentum.')
     parser.add_argument('--optim_nesterov', type=int, default=0,
                         help='optimizer nesterov momentum.')
+    
+    parser.add_argument('--optimizer', type=str, default='sgd', choices=['sgd', 'adam'],
+                        help='Optimizer to use.')
 
     parser.add_argument('--batch_size', type=int, required=False,
                         help='Batch size.')
@@ -35,7 +38,7 @@ def add_experiment_args(parser: ArgumentParser) -> None:
     parser.add_argument('--timeme', action='store_true')
     parser.add_argument('--nowand', choices=[0, 1], default=0, type=int)
     parser.add_argument('--wandb_entity', type=str, help='Wandb entity')
-    parser.add_argument('--wandb_project', type=str, default='mammoth', help='Wandb project name')
+    parser.add_argument('--wandb_project', type=str, help='Wandb project name')
 
 
 def add_management_args(parser: ArgumentParser) -> None:
