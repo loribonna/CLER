@@ -135,7 +135,7 @@ class OnProtoPretext(PretextModel):
         self.task = 0
         self.scaler = GradScaler()
         self.buffer_per_class = 7
-        self.classes_mean = torch.zeros((self.num_classes, 128), requires_grad=False).cuda()
+        self.classes_mean = torch.zeros((self.num_classes, 128), requires_grad=False).to(self.device)
         self.OPELoss = OPELoss(self.cpt, temperature=self.args.proto_t)
         self.APF = AdaptivePrototypicalFeedback(self.buffer, args.mixup_base_rate, args.mixup_p, args.mixup_lower, args.mixup_upper,
                                   args.mixup_alpha, self.cpt, self.device)
@@ -214,7 +214,7 @@ class OnProtoPretext(PretextModel):
             if not self.buffer.is_empty():
                 buffer_x, buffer_y = self.buffer.get_data(self.args.batch_size)
                 # buffer_x.requires_grad = True
-                buffer_x, buffer_y = buffer_x.cuda(), buffer_y.cuda()
+                buffer_x, buffer_y = buffer_x.to(self.device), buffer_y.to(self.device)
                 buffer_x_pair = torch.cat([buffer_x, self.weak_transform(buffer_x)], dim=0)
                 all_inputs = self.weak_transform(torch.cat((x, buffer_x_pair), dim=0))
 
@@ -256,7 +256,7 @@ class OnProtoPretext(PretextModel):
                 mem_x, mem_y, mem_y_mix = self.APF(ori_mem_x, ori_mem_y, buffer_batch_size, self.classes_mean, self.task)
                 rot_sim_labels = torch.cat([labels + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_sim_labels_r = torch.cat([mem_y + self.num_classes * i for i in range(self.args.oop)], dim=0)
-                rot_mem_y_mix = torch.zeros(rot_sim_labels_r.shape[0], 3).cuda()
+                rot_mem_y_mix = torch.zeros(rot_sim_labels_r.shape[0], 3).to(self.device)
                 rot_mem_y_mix[:, 0] = torch.cat([mem_y_mix[:, 0] + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_mem_y_mix[:, 1] = torch.cat([mem_y_mix[:, 1] + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_mem_y_mix[:, 2] = mem_y_mix[:, 2].repeat(self.args.oop)
