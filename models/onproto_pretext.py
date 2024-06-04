@@ -21,9 +21,9 @@ def get_parser() -> ArgumentParser:
     parser.add_argument('--ins_t', type=float, default=0.07, help='(default=%(default)s)')
 
     # AFP
-    parser.add_argument('--mixup_base_rate', type=float, default=0.75, help='(default=%(default)s)')
+    parser.add_argument('--mixup_base_rate', type=float, default=0.9, help='(default=%(default)s)')
     parser.add_argument('--mixup_alpha', type=float, default=0.4, help='(default=%(default)s)')
-    parser.add_argument('--mixup_p', type=float, default=0.6, help='(default=%(default)s)')
+    parser.add_argument('--mixup_p', type=float, default=0.2, help='(default=%(default)s)')
     parser.add_argument('--mixup_lower', type=float, default=0, help='(default=%(default)s)')
     parser.add_argument('--mixup_upper', type=float, default=0.6, help='(default=%(default)s)')
 
@@ -139,7 +139,7 @@ class OnProtoPretext(PretextModel):
         self.OPELoss = OPELoss(self.cpt, temperature=self.args.proto_t)
         self.APF = AdaptivePrototypicalFeedback(self.buffer, args.mixup_base_rate, args.mixup_p, args.mixup_lower, args.mixup_upper,
                                   args.mixup_alpha, self.cpt, self.device)
-        self.weak_transform = to_kornia_transform(transform)
+        # self.weak_transform = to_kornia_transform(transform)
         self.custom_transform = nn.Sequential(
             HorizontalFlipLayer(),
             RandomColorGrayLayer(p=0.25),
@@ -154,6 +154,10 @@ class OnProtoPretext(PretextModel):
         else:
             self.sim_lambda = self.args.sim_lambda
 
+    def begin_task(self, dataset):
+        self.net.train()
+        self.batch_idx = 0
+
     def end_task(self, dataset):
         self.task += 1
 
@@ -161,10 +165,10 @@ class OnProtoPretext(PretextModel):
         super().to(device)
         self.seen_so_far = self.seen_so_far.to(device)
 
-    
     def cal_buffer_proto_loss(self, buffer_x, buffer_y, buffer_x_pair, task_id):
-        buffer_fea = self.net(buffer_x_pair, returnt='features')
-        buffer_z = self.net.projector(buffer_fea)
+        buffer_z = self.net.projector(self.net(buffer_x_pair, returnt='features'))
+
+        # _, buffer_z = self.net(buffer_x_pair, use_proj=True)
         buffer_z_norm = F.normalize(buffer_z)
         buffer_z1 = buffer_z_norm[:buffer_x.shape[0]]
         buffer_z2 = buffer_z_norm[buffer_x.shape[0]:]
@@ -174,30 +178,43 @@ class OnProtoPretext(PretextModel):
 
         return buffer_proto_loss, buffer_z1_proto, buffer_z2_proto, buffer_z_norm
 
+    def sample_from_buffer_for_prototypes(self):
+        b_num = self.buffer.x.shape[0]
+        if b_num <= self.args.minibatch_size:
+            buffer_x = self.buffer.x
+            buffer_y = self.buffer.y
+            _, buffer_y = torch.max(buffer_y, dim=1)
+        else:
+            buffer_x, buffer_y, _ = self.buffer.sample(self.args.minibatch_size, exclude_task=None)
 
+        return buffer_x, buffer_y
+    
     def observe_task0(self, inputs, labels, not_aug_inputs, epoch=None):
+        orig_samples = inputs.clone()
+        self.batch_idx += 1
         labels = labels.long()
         present = labels.unique()
         self.seen_so_far = torch.cat([self.seen_so_far, present]).unique()
 
         with autocast():
-            # x = not_aug_inputs.requires_grad_()
-            x = not_aug_inputs
+            # x = self.normalize(not_aug_inputs).requires_grad_()
+            x = inputs
 
             if self.args.enable_rotation:
                 rot_x = Rotation(x)
-                rot_x_aug = self.weak_transform(rot_x)
+                rot_x_aug = self.custom_transform(rot_x)
 
                 rot_sim_labels = torch.cat([labels + self.num_classes * i for i in range(self.args.oop)], dim=0)
             else:
                 rot_sim_labels = labels
-                x_aug = self.weak_transform(x)
+                x_aug = self.custom_transform(x)
                 rot_x = x
                 rot_x_aug = x_aug # as written in the paper
             inputs = torch.cat([rot_x, rot_x_aug], dim=0)
 
             features = self.net(inputs, returnt='features')
             projections = self.net.projector(features)
+            # features, projections = self.net(inputs, use_proj=True)
             projections = F.normalize(projections)
 
             # instance-wise contrastive loss in OCM
@@ -211,17 +228,18 @@ class OnProtoPretext(PretextModel):
 
             ins_loss = Supervised_NT_xent_n(sim_matrix, labels=rot_sim_labels, temperature=self.args.ins_t)
             
-            if not self.buffer.is_empty():
-                buffer_x, buffer_y = self.buffer.get_data(self.args.batch_size)
-                # buffer_x.requires_grad = True
+            if self.batch_idx!=1:
+                buffer_x, buffer_y = self.buffer.get_data(self.args.minibatch_size)
+                # buffer_x, buffer_y = self.sample_from_buffer_for_prototypes()
+                buffer_x.requires_grad = True
                 buffer_x, buffer_y = buffer_x.to(self.device), buffer_y.to(self.device)
-                buffer_x_pair = torch.cat([buffer_x, self.weak_transform(buffer_x)], dim=0)
-                all_inputs = self.weak_transform(torch.cat((x, buffer_x_pair), dim=0))
+                buffer_x_pair = torch.cat([buffer_x, self.custom_transform(buffer_x)], dim=0)
+                all_inputs = self.custom_transform(torch.cat((x, buffer_x_pair), dim=0))
 
                 proto_seen_loss, _, _, _ = self.cal_buffer_proto_loss(buffer_x, buffer_y, buffer_x_pair, self.task)
             else:
                 proto_seen_loss = 0
-                all_inputs = inputs
+                all_inputs = self.custom_transform(x)
 
             z = projections[:rot_x.shape[0]]
             zt = projections[rot_x.shape[0]:]
@@ -229,7 +247,7 @@ class OnProtoPretext(PretextModel):
 
             OPE_loss = proto_new_loss + proto_seen_loss
 
-            y_pred = self.net(self.weak_transform(x))
+            y_pred = self.net(self.custom_transform(x))
             ce = F.cross_entropy(y_pred, labels)
 
             ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
@@ -242,17 +260,20 @@ class OnProtoPretext(PretextModel):
         self.scaler.step(self.opt)
         self.scaler.update()
         self.opt.zero_grad()
-        self.buffer.add_data(examples=not_aug_inputs.detach(), labels=labels.detach())
+        self.buffer.add_data(examples=orig_samples.detach(), labels=labels.detach())
 
         return loss.item(), 0, 0, 0, 0
     
     def observe_other_tasks(self, inputs, labels, not_aug_inputs, epoch=None):
+        orig_samples = inputs.clone()
+        self.batch_idx += 1
         with autocast():
             # x = x.requires_grad_()
             buffer_batch_size = min(self.args.minibatch_size, self.buffer_per_class * len(self.seen_so_far))
 
             ori_mem_x, ori_mem_y = self.buffer.get_data(buffer_batch_size)
-            if not self.buffer.is_empty():
+            # ori_mem_x, ori_mem_y, _ = self.buffer.sample(buffer_batch_size, exclude_task=None)
+            if self.batch_idx!=1:
                 mem_x, mem_y, mem_y_mix = self.APF(ori_mem_x, ori_mem_y, buffer_batch_size, self.classes_mean, self.task)
                 rot_sim_labels = torch.cat([labels + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_sim_labels_r = torch.cat([mem_y + self.num_classes * i for i in range(self.args.oop)], dim=0)
@@ -261,7 +282,7 @@ class OnProtoPretext(PretextModel):
                 rot_mem_y_mix[:, 1] = torch.cat([mem_y_mix[:, 1] + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_mem_y_mix[:, 2] = mem_y_mix[:, 2].repeat(self.args.oop)
 
-                all_inputs = self.weak_transform(torch.cat((inputs, mem_x), dim=0))
+                all_inputs = self.custom_transform(torch.cat((inputs, mem_x), dim=0))
             else:
                 mem_x = ori_mem_x
                 mem_y = ori_mem_y
@@ -269,14 +290,14 @@ class OnProtoPretext(PretextModel):
                 rot_sim_labels = torch.cat([labels + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_sim_labels_r = torch.cat([mem_y + self.num_classes * i for i in range(self.args.oop)], dim=0)
 
-                all_inputs = self.weak_transform(inputs)
+                all_inputs = self.custom_transform(inputs)
 
             # mem_x = mem_x.requires_grad_()
 
             rot_x = Rotation(inputs)
             rot_x_r = Rotation(mem_x)
-            rot_x_aug = self.weak_transform(rot_x)
-            rot_x_r_aug = self.weak_transform(rot_x_r)
+            rot_x_aug = self.custom_transform(rot_x)
+            rot_x_r_aug = self.custom_transform(rot_x_r)
             images_pair = torch.cat([rot_x, rot_x_aug], dim=0)
             images_pair_r = torch.cat([rot_x_r, rot_x_r_aug], dim=0)
 
@@ -284,6 +305,7 @@ class OnProtoPretext(PretextModel):
 
             features = self.net(all_images, returnt='features')
             projections = self.net.projector(features)
+            # features, projections = self.net(all_images, use_proj=True)
 
             projections_x = projections[:images_pair.shape[0]]
             projections_x_r = projections[images_pair.shape[0]:]
@@ -311,11 +333,11 @@ class OnProtoPretext(PretextModel):
             
             ins_loss = loss_sim_r + loss_sim
 
-            y_pred = self.net(self.weak_transform(mem_x))
+            y_pred = self.net(self.custom_transform(mem_x))
 
             buffer_x = ori_mem_x
             buffer_y = ori_mem_y
-            buffer_x_pair = torch.cat([buffer_x, self.weak_transform(buffer_x)], dim=0)
+            buffer_x_pair = torch.cat([buffer_x, self.custom_transform(buffer_x)], dim=0)
             proto_seen_loss, cur_buffer_z1_proto, cur_buffer_z2_proto, cur_buffer_z = self.cal_buffer_proto_loss(buffer_x, buffer_y, buffer_x_pair, self.task)
 
             z = projections_x[:rot_x.shape[0]]
@@ -324,7 +346,7 @@ class OnProtoPretext(PretextModel):
 
             OPE_loss = proto_new_loss + proto_seen_loss
 
-            if not self.buffer.is_empty():
+            if self.batch_idx != 1:
                 ce = self.loss_mixup(y_pred, mem_y_mix)
             else:
                 ce = F.cross_entropy(y_pred, mem_y)
@@ -339,7 +361,7 @@ class OnProtoPretext(PretextModel):
         self.scaler.step(self.opt)
         self.scaler.update()
         self.opt.zero_grad()
-        self.buffer.add_data(examples=not_aug_inputs, labels=labels)
+        self.buffer.add_data(examples=orig_samples, labels=labels)
 
         return loss.item(), 0, 0, 0, 0
 

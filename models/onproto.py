@@ -147,7 +147,7 @@ class OnProto(ContinualModel):
             HorizontalFlipLayer(),
             RandomColorGrayLayer(p=0.25),
             RandomResizedCropLayer(scale=(0.3, 1.0), size=[32, 32, 3] if 'cifar' in args.dataset else [84, 84, 3]))
-                                  
+
         if "cifar100" in args.dataset:
             self.sim_lambda = 1.0
         elif "cifar10" in args.dataset:
