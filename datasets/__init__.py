@@ -1,6 +1,7 @@
 from datasets.seq_cifar100_online import SequentialCIFAR100Online
 from datasets.seq_miniimagenet_online import SequentialMiniImagenetOnline
 from datasets.seq_cifar100_online_onproto import SequentialCIFAR100OnlineOnproto
+from datasets.seq_miniimagenet_online_onproto import SequentialMiniImagenetOnlineOnproto
 from datasets.utils.continual_dataset import ContinualDataset
 from argparse import Namespace
 
@@ -8,6 +9,7 @@ NAMES = {
     SequentialCIFAR100Online.NAME: SequentialCIFAR100Online,
     SequentialMiniImagenetOnline.NAME: SequentialMiniImagenetOnline,
     SequentialCIFAR100OnlineOnproto.NAME: SequentialCIFAR100OnlineOnproto,
+    SequentialMiniImagenetOnlineOnproto.NAME: SequentialMiniImagenetOnlineOnproto
 }
 
 GCL_NAMES = {}
