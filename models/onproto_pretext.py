@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from models.utils.pretext_model import PretextModel
 from utils.buffer import Buffer
@@ -10,6 +11,7 @@ from torch.cuda.amp import autocast as autocast
 from torch.cuda.amp import GradScaler
 from models.onproto_utils.ope import OPELoss
 from models.onproto_utils.apf import AdaptivePrototypicalFeedback
+from datasets.mytransform import HorizontalFlipLayer, RandomColorGrayLayer, RandomResizedCropLayer
 
 def get_parser() -> ArgumentParser:
     parser = ArgumentParser()
@@ -136,9 +138,13 @@ class OnProtoPretext(PretextModel):
         self.classes_mean = torch.zeros((self.num_classes, 128), requires_grad=False).cuda()
         self.OPELoss = OPELoss(self.cpt, temperature=self.args.proto_t)
         self.APF = AdaptivePrototypicalFeedback(self.buffer, args.mixup_base_rate, args.mixup_p, args.mixup_lower, args.mixup_upper,
-                                  args.mixup_alpha, self.cpt)
+                                  args.mixup_alpha, self.cpt, self.device)
         self.weak_transform = to_kornia_transform(transform)
-                                  
+        self.custom_transform = nn.Sequential(
+            HorizontalFlipLayer(),
+            RandomColorGrayLayer(p=0.25),
+            RandomResizedCropLayer(scale=(0.3, 1.0), size=[32, 32, 3] if 'cifar' in args.dataset else [84, 84, 3]))
+
         if "cifar100" in args.dataset:
             self.sim_lambda = 1.0
         elif "cifar10" in args.dataset:
