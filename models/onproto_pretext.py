@@ -29,6 +29,8 @@ def get_parser() -> ArgumentParser:
 
     parser.add_argument('--ptx_alpha', type=float, required=True)
     parser.add_argument('--sim_lambda', type=float, default=1, help='(default=%(default)s)')
+
+    parser.add_argument('--current_version', type=int, default=1, help='VERSIONING ONLY, DO NOT CHANGE')
     add_management_args(parser)
     add_experiment_args(parser)
     add_rehearsal_args(parser)
@@ -234,12 +236,12 @@ class OnProtoPretext(PretextModel):
                 buffer_x.requires_grad = True
                 buffer_x, buffer_y = buffer_x.to(self.device), buffer_y.to(self.device)
                 buffer_x_pair = torch.cat([buffer_x, self.custom_transform(buffer_x)], dim=0)
-                all_inputs = self.custom_transform(torch.cat((x, buffer_x_pair), dim=0))
+                all_inputs = torch.cat((x, buffer_x), dim=0)
 
                 proto_seen_loss, _, _, _ = self.cal_buffer_proto_loss(buffer_x, buffer_y, buffer_x_pair, self.task)
             else:
                 proto_seen_loss = 0
-                all_inputs = self.custom_transform(x)
+                all_inputs = x
 
             z = projections[:rot_x.shape[0]]
             zt = projections[rot_x.shape[0]:]
@@ -284,7 +286,7 @@ class OnProtoPretext(PretextModel):
                 rot_mem_y_mix[:, 1] = torch.cat([mem_y_mix[:, 1] + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_mem_y_mix[:, 2] = mem_y_mix[:, 2].repeat(self.args.oop)
 
-                all_inputs = self.custom_transform(torch.cat((inputs, mem_x), dim=0))
+                all_inputs = torch.cat((inputs, mem_x, ori_mem_x), dim=0)
             else:
                 mem_x = ori_mem_x
                 mem_y = ori_mem_y
@@ -292,7 +294,7 @@ class OnProtoPretext(PretextModel):
                 rot_sim_labels = torch.cat([labels + self.num_classes * i for i in range(self.args.oop)], dim=0)
                 rot_sim_labels_r = torch.cat([mem_y + self.num_classes * i for i in range(self.args.oop)], dim=0)
 
-                all_inputs = self.custom_transform(inputs)
+                all_inputs = torch.cat((inputs, mem_x), dim=0)
 
             # mem_x = mem_x.requires_grad_()
 
