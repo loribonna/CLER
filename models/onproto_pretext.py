@@ -250,11 +250,13 @@ class OnProtoPretext(PretextModel):
             y_pred = self.net(self.custom_transform(x))
             ce = F.cross_entropy(y_pred, labels)
 
-            ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
-            ptx_outputs = self.get_ptx_outputs(ptx_inputs, self.net)
-            loss_ptx = self.get_ce_pret_loss(ptx_outputs, ptx_labels)
+            loss = ce + ins_loss + OPE_loss
+            if self.args.ptx_alpha>0:
+                ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
+                ptx_outputs = self.get_ptx_outputs(ptx_inputs, self.net)
+                loss_ptx = self.get_ce_pret_loss(ptx_outputs, ptx_labels)
 
-            loss = ce + ins_loss + OPE_loss + self.args.ptx_alpha * loss_ptx
+                loss += (self.args.ptx_alpha * loss_ptx)
 
         self.scaler.scale(loss).backward()
         self.scaler.step(self.opt)
@@ -351,11 +353,13 @@ class OnProtoPretext(PretextModel):
             else:
                 ce = F.cross_entropy(y_pred, mem_y)
 
-            ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
-            ptx_outputs = self.get_ptx_outputs(ptx_inputs, self.net)
-            loss_ptx = self.get_ce_pret_loss(ptx_outputs, ptx_labels)
+            loss = ce + ins_loss + OPE_loss
+            if self.args.ptx_alpha>0:
+                ptx_inputs, ptx_labels = self.pretexter(self.base_data_aug(all_inputs))
+                ptx_outputs = self.get_ptx_outputs(ptx_inputs, self.net)
+                loss_ptx = self.get_ce_pret_loss(ptx_outputs, ptx_labels)
 
-            loss = ce + ins_loss + OPE_loss + self.args.ptx_alpha * loss_ptx
+                loss += (self.args.ptx_alpha * loss_ptx)
 
         self.scaler.scale(loss).backward()
         self.scaler.step(self.opt)
