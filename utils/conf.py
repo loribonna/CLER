@@ -15,7 +15,6 @@ def get_device() -> torch.device:
             if all(memory == 0 for memory in gpu_memory):
                 print("WARNING: some weird GPU memory issue. Using trick from https://discuss.pytorch.org/t/torch-cuda-memory-allocated-returns-0-if-pytorch-no-cuda-memory-caching-1/188796")
                 for i in range(torch.cuda.device_count()):
-                    torch.zeros(1).to(i)
                     free_memory, total_memory = torch.cuda.mem_get_info(i)
                     gpu_memory[i] = total_memory - free_memory
             device = torch.device(f'cuda:{np.argmin(gpu_memory)}')
