@@ -112,7 +112,9 @@ def to_kornia_transform(transform: transforms.Compose, apply: bool = True) -> Un
         elif isinstance(t, transforms.Normalize):
             ts.append(kornia.augmentation.Normalize(mean=t.mean, std=t.std, p=1))
         else:
-            raise NotImplementedError
+            ts.append(t)
+        # else:
+        #     raise NotImplementedError
 
     if not apply:
         return ts

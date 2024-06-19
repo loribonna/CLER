@@ -200,6 +200,7 @@ class ResNet(nn.Module):
         :param x: input tensor (batch_size, *input_shape)
         :return: output tensor (output_classes)
         """
+        assert returnt in ['out', 'features', 'full', 'both']
         out_0 = self.bn1(self.conv1(x))
         out_0 = relu(out_0)
 
