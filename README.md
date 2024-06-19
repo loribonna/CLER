@@ -15,6 +15,9 @@
 **Note**: by default the experiments are done in an online setting. To run the experiments in an offline setting, add the `--n_epochs` argument.
 - *For example, `--n_epochs=30` for Seq. CIFAR-100 and `--n_epochs=50` for Seq. *mini*ImageNet.*
 
+**ONLY FOR OnPro**
+We follow the original implementation and add extra transforms to `onpro`. These are available using the `seq-cifar100-online-onpro` and `seq-miniimagenet-online-onpro` datasets.
+
 ## Models
 - DualNet:  `dualnet`
 - CoPE:     `cope`
@@ -24,6 +27,7 @@
 - Finetune: `sgd`
 - LwF.MC:   `lwf`
 - R-DFCIL:  `rdfcil`
+- OnPro:    `onpro`
 
 ## Arguments
 
@@ -33,9 +37,10 @@
     - (optional) `--pretext` (default: `jigsaw`, choices: [`rotation`, `jigsaw`]). Pretext task to use.
     - (if `jigsaw`) `--n_patches` (default: `4`, choices: [`4`, `9`, `16`]). Number of patches to split the image into.
     - (if `jigsaw`) `--max_permutations` (default: `100`). Maximum number of permutations to use for the jigsaw task.
-- **CSSL** (barlow twins): `<model name>_cssl`
+- **CSSL**: `<model name>_cssl`
     - requires `--inv_alpha` (`lambda_r`)
-    - not available for `lwf` and `rdfcil`
+    - `--selfsup` (default: `barlow`, choices: [`simclr`, `simsiam`, ` byol`, `barlow`, `mocov2`]). Contrastive-based method to use.
+    - not available for `lwf`, `rdfcil`, and `onpro`.
 
 *Note: Not available for SGD and Joint*
 
