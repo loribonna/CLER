@@ -1,4 +1,4 @@
-# On the Effectiveness of Equivariance Regularization for Robust Online Continual Learning
+# On the Effectiveness of Equivariance Regularization for Online Continual Learning
 
 **Built on top of Mammoth - An Extendible (General) Continual Learning Framework for Pytorch**
 
